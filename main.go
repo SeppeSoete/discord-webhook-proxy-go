@@ -1,25 +1,24 @@
 package main
 
 import (
+	"errors"
+	"log"
 	"net/http"
 	"net/http/httputil"
-	"os"
-	"log"
 	"net/url"
-	"errors"
+	"os"
 )
-
 
 func main() {
 	// default error handler in main function: if something goes wrong, abort mission
-	handleErr := func(err error){
-		if(err != nil){
+	handleErr := func(err error) {
+		if err != nil {
 			log.Fatal(err)
-			os.exit(1)
+			os.Exit(1)
 		}
 	}
 
-	port, webhook, err := getEnvs()
+	webhook, port, err := getEnvs()
 	handleErr(err)
 
 	proxy, err := mkProxy(webhook)
@@ -27,14 +26,14 @@ func main() {
 
 	http.HandleFunc("/", mkServer(proxy))
 
-	handleErr(http.ListenAndServe(":" + port, nil))
+	handleErr(http.ListenAndServe(":"+port, nil))
 }
 
 // Get the webhook url and port number from the environment
 func getEnvs() (string, string, error) {
 	hook := os.Getenv("DISCORD_WEBHOOK_URL")
 	if hook == "" {
-		return nil, nil, errors.New("no webhook url")
+		return "", "", errors.New("no webhook url")
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -45,14 +44,15 @@ func getEnvs() (string, string, error) {
 
 // Make the reverse proxy which will forward the request to the discord webhook
 func mkProxy(dest string) (*httputil.ReverseProxy, error) {
-	if target, err := url.Parse(hook); err != nil {
+	target, err := url.Parse(dest)
+	if err != nil {
 		return nil, err
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
-		func(req *http.Request){
+		func(req *http.Request) {
 			req.Host = target.Host
 			req.URL = target
 		}(req)
@@ -61,10 +61,10 @@ func mkProxy(dest string) (*httputil.ReverseProxy, error) {
 }
 
 // Make the http server that handles all incoming requests to /
-func mkServer(proxy *httputil.ReverseProxy) func(w http.ResponseWriter, r *http.Request){
-	return func(w http.ResponseWriter, r *http.Request){
+func mkServer(proxy *httputil.ReverseProxy) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if !validPassword(q.Get("password")){
+		if !validPassword(q.Get("password")) {
 			return
 		}
 		proxy.ServeHTTP(w, r)
