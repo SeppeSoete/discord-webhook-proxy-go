@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Admin panel</h2>
+<script>
+	function getFormData(){
+		const form = new FormData(adminform).entries();
+		const { name, token } = Object.fromEntries(form);
+		return {name, token};
+	}
+	async function sendRequest(endpoint, data){
+		return fetch(endpoint + "?" + new URLSearchParams(data).toString(), {
+			method: 'GET',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+		});
+	}
+	async function handleButtonAction(endpoint, prefix){
+		sendRequest(endpoint, getFormData())
+			.then(r => r.text())
+			.then(r => {
+				response.innerHTML = prefix + r;
+			});
+	}
+	async function createUser(){
+		handleButtonAction('/newToken', "create user: ");
+	}
+	async function deleteUser(){
+		handleButtonAction('/deleteUser', "delete user: ");
+	}
+	async function promoteUser(){
+		handleButtonAction('/promoteUser', "promote user: ");
+	}
+	async function findTokens(){
+		handleButtonAction('/findTokens', "tokens: ");
+	}
+</script>
+
+<form id="adminform">
+  <label for="token">Admin token:</label><br>
+  <input type="text" id="token" name="token" value="token"><br>
+  <label for="name">Target User:</label><br>
+  <input type="text" id="name" name="name" value="username"><br><br>
+</form> 
+<div>
+  <input type="button" value="Create user" onclick="createUser()">
+  <input type="button" value="Delete user" onclick="deleteUser()">
+  <input type="button" value="Promote user" onclick="promoteUser()">
+  <input type="button" value="Find user tokens" onclick="findTokens()">
+</div>
+
+<div id="response"></div>
+
+</body>
+</html>
+

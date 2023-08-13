@@ -40,6 +40,10 @@ func main() {
 	client := mkFirestoreClient(ctx)
 	defer client.Close()
 
+	http.HandleFunc("/admin", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "index.html")
+	})
+
 	// takes url params: token, name
 	http.HandleFunc("/newToken", handleNewToken(client, mkValidator(client, true)))
 
@@ -50,6 +54,10 @@ func main() {
 	// takes url params: token, name
 	// token being the admin's token and name the user to delete
 	http.HandleFunc("/promoteUser", handlePromoteToAdmin(client, mkValidator(client, true)))
+
+	// takes url params: token, name
+	// token being the admin's token and name the user to delete
+	http.HandleFunc("/findTokens", handleFindTokenRequest(client, mkValidator(client, true)))
 
 	// Makes endpoints for the configured hooks. These endpoints take only a token as url param and do not need admin privileges
 	for webhook := range webhooks {
@@ -205,6 +213,15 @@ func promoteUser(client *firestore.Client, name string) error {
 	return nil
 }
 
+func getUserDocumentsByName(client *firestore.Client, name string) ([]*firestore.DocumentSnapshot, error) {
+	ctx := context.Background()
+	queries, err := client.Collection("users").Where("Name", "==", name).Documents(ctx).GetAll()
+	if err != nil {
+		return nil, err
+	}
+	return queries, nil
+}
+
 // Handler for a request to the deletion endpoint
 func handleDeleteRequest(client *firestore.Client, validator func(token string) bool) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -213,10 +230,12 @@ func handleDeleteRequest(client *firestore.Client, validator func(token string) 
 		token := q.Get("token")
 		if name == "" || token == "" {
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("failed: invalid request"))
 			return
 		}
 		if !validator(token) {
 			log.Println("failed to validate admin request for deletion")
+			w.Write([]byte("failed: invalid token"))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -224,8 +243,10 @@ func handleDeleteRequest(client *firestore.Client, validator func(token string) 
 		if err != nil {
 			log.Println("could not delete user: ", err)
 			w.WriteHeader(500)
+			w.Write([]byte("unknown failure"))
 			return
 		}
+		w.Write([]byte("success"))
 	}
 }
 
@@ -236,10 +257,12 @@ func handleNewToken(client *firestore.Client, validator func(token string) bool)
 		name := q.Get("name")
 		if name == "" {
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("failed: invalid request"))
 			return
 		}
 		if !validator(q.Get("token")) {
 			log.Println("failed to validate admin request with token ", q.Get("token"))
+			w.Write([]byte("failed: invalid token"))
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -250,6 +273,7 @@ func handleNewToken(client *firestore.Client, validator func(token string) bool)
 		_, err := client.Collection("users").Doc(token).Set(ctx, obj)
 		if err != nil {
 			log.Println(err)
+			w.Write([]byte("unknown failure"))
 			w.WriteHeader(500)
 		}
 		w.WriteHeader(http.StatusCreated)
@@ -266,18 +290,57 @@ func handlePromoteToAdmin(client *firestore.Client, validator func(token string)
 		token := q.Get("token")
 		if name == "" || token == "" {
 			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("failed: invalid request"))
 			return
 		}
 		if !validator(token) {
 			log.Println("failed to validate admin request for deletion")
 			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("failed: invalid token"))
 			return
 		}
 		err := promoteUser(client, name)
 		if err != nil {
-			log.Println("could not delete user: ", err)
+			log.Println("could not promote user: ", err)
 			w.WriteHeader(500)
+			w.Write([]byte("unknown failure"))
 			return
 		}
+		w.Write([]byte("success"))
+	}
+}
+
+// Handler for a request to find a token by username
+func handleFindTokenRequest(client *firestore.Client, validator func(token string) bool) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		name := q.Get("name")
+		token := q.Get("token")
+		if name == "" || token == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("failed: invalid request"))
+			return
+		}
+		if !validator(token) {
+			log.Println("failed to validate admin request for deletion")
+			w.Write([]byte("failed: invalid token"))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		queries, err := getUserDocumentsByName(client, name)
+		if err != nil {
+			log.Println("could not find user: ", err)
+			w.WriteHeader(500)
+			w.Write([]byte("unknown failure"))
+			return
+		}
+		var res string
+		for i := range queries {
+			res += queries[i].Ref.ID + "\n"
+		}
+		if res == "" {
+			res = "None"
+		}
+		w.Write([]byte(res))
 	}
 }
