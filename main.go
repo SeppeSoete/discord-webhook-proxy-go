@@ -92,6 +92,7 @@ func mkServer(proxy *httputil.ReverseProxy, validator func(token string) bool) f
 	}
 }
 
+// makes the firestore client which is used to interact with the firestore db
 func mkFirestoreClient(ctx context.Context) *firestore.Client {
 	// Sets your Google Cloud Platform project ID.
 	projectID := os.Getenv("PROJECT_ID")
@@ -113,6 +114,7 @@ func mkFirestoreClient(ctx context.Context) *firestore.Client {
 	return client
 }
 
+// Generate a unique token for a user
 func generateToken(length int) string {
 	b := make([]byte, length)
 	if _, err := rand.Read(b); err != nil {
@@ -135,6 +137,7 @@ func mkValidator(client *firestore.Client, admin bool) func(token string) bool {
 	}
 }
 
+// Get the user information for a token if it exists, returns an empty object if the user isn't found
 func retrieveUserObjectByToken(client *firestore.Client, token string) datastoreObject {
 	ctx := context.Background()
 	obj, err := client.Collection("users").Doc(token).Get(ctx)
@@ -148,6 +151,7 @@ func retrieveUserObjectByToken(client *firestore.Client, token string) datastore
 	return user
 }
 
+// Deletes a user from the db, disallowing future access
 func deleteUser(client *firestore.Client, name string) error {
 	ctx := context.Background()
 	queries, err := client.Collection("users").Where("name", "==", name).Documents(ctx).GetAll()
@@ -160,6 +164,7 @@ func deleteUser(client *firestore.Client, name string) error {
 	return nil
 }
 
+// Handler for a request to the deletion endpoint
 func handleDeleteRequest(client *firestore.Client, validator func(token string) bool) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -183,7 +188,7 @@ func handleDeleteRequest(client *firestore.Client, validator func(token string) 
 	}
 }
 
-// New token request
+// New token request handler
 func handleNewToken(client *firestore.Client, validator func(token string) bool) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
