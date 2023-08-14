@@ -1,0 +1,32 @@
+name: Deploy to appengine
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+    - uses: 'actions/checkout@v3'
+
+    - id: 'add_configs'
+      env: 
+        APP_YAML: ${{ secrets.APP_YAML }}
+        SERVICE_ACCOUNT_KEY: ${{ secrets.SERVICE_ACCOUNT_KEY }}
+      run: |
+        echo "$APP_YAML" >> app.yaml 
+        echo "$SERVICE_ACCOUNT_KEY" >> key.json
+
+    - id: 'install_cloud_sdk'
+      run: 
+        echo "google-cloud*" >> .gcloudignore
+        curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-442.0.0-linux-x86_64.tar.gz 
+        tar -xzf ./*.tar.gz 
+        ./google-cloud-sdk/install.sh --quiet --additional-components app-engine-go 
+        source /home/runner/work/discord-webhook-proxy-go/discord-webhook-proxy-go/google-cloud-sdk/path.bash.inc 
+        gcloud auth login --cred-file=key.json
+        gcloud app deploy --quiet --format json app.yaml --promote
