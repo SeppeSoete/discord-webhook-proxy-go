@@ -22,11 +22,14 @@ jobs:
         echo "$SERVICE_ACCOUNT_KEY" >> key.json
 
     - id: 'install_cloud_sdk'
-      run: 
+      env:
+        PROJECT: ${{ secrets.PROJECT }}
+      run: |
         echo "google-cloud*" >> .gcloudignore
         curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-442.0.0-linux-x86_64.tar.gz 
         tar -xzf ./*.tar.gz 
         ./google-cloud-sdk/install.sh --quiet --additional-components app-engine-go 
         source /home/runner/work/discord-webhook-proxy-go/discord-webhook-proxy-go/google-cloud-sdk/path.bash.inc 
         gcloud auth login --cred-file=key.json
-        gcloud app deploy --quiet --format json app.yaml --promote
+        gcloud config set project $PROJECT
+        gcloud app deploy --quiet --format json app.yaml --promote --project $PROJECT
